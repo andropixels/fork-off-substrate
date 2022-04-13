@@ -4,7 +4,8 @@ const chalk = require('chalk');
 const cliProgress = require('cli-progress');
 require("dotenv").config();
 const { ApiPromise } = require('@polkadot/api');
-const { HttpProvider } = require('@polkadot/rpc-provider');
+//import { ApiPromise, WsProvider } from '@polkadot/api';
+const { WsProvider } = require('@polkadot/rpc-provider');
 const { xxhashAsHex } = require('@polkadot/util-crypto');
 const execFileSync = require('child_process').execFileSync;
 const execSync = require('child_process').execSync;
@@ -17,18 +18,24 @@ const forkedSpecPath = path.join(__dirname, 'data', 'fork.json');
 const storagePath = path.join(__dirname, 'data', 'storage.json');
 
 // Using http endpoint since substrate's Ws endpoint has a size limit.
-const provider = new HttpProvider(process.env.HTTP_RPC_ENDPOINT || 'http://localhost:9933')
+const WSprovider = new WsProvider( 'ws://127.0.0.1:9944');//wss://node-test.riochain.io //0.0.0.0:9944
 // The storage download will be split into 256^chunksLevel chunks.
-const chunksLevel = process.env.FORK_CHUNKS_LEVEL || 1;
+const chunksLevel = 2;
+// process.env.FORK_CHUNKS_LEVEL || 1;
 const totalChunks = Math.pow(256, chunksLevel);
 
-const alice = process.env.ALICE || ''
-const originalChain = process.env.ORIG_CHAIN || '';
-const forkChain = process.env.FORK_CHAIN || '';
+const alice = process.env.ALICE || '';
+const originalChain = 'dev2'      ;                               
+// process.env.ORIG_CHAIN || '';
+const forkChain = 'dev2' ;
+//  process.env.FORK_CHAIN || '';
 
 let chunksFetched = 0;
 let separator = false;
 const progressBar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
+
+
+
 
 /**
  * All module prefixes except those mentioned in the skippedModulesPrefix will be added to this by the script.
@@ -72,22 +79,24 @@ async function main() {
   console.log(chalk.green('We are intentionally using the HTTP endpoint. If you see any warnings about that, please ignore them.'));
   if (!fs.existsSync(schemaPath)) {
     console.log(chalk.yellow('Custom Schema missing, using default schema.'));
-    api = await ApiPromise.create({ provider });
+    api = await ApiPromise.create({ provider:WSprovider });
   } else {
     const { types, rpc } = JSON.parse(fs.readFileSync(schemaPath, 'utf8'));
     api = await ApiPromise.create({
-      provider,
-      types,
-      rpc,
+      provider:WSprovider
+      
+    
     });
   }
 
+//const api = await ApiPromise.create({ provider: wsProvider });
   if (fs.existsSync(storagePath)) {
     console.log(chalk.yellow('Reusing cached storage. Delete ./data/storage.json and rerun the script if you want to fetch latest storage'));
   } else {
     // Download state of original chain
     console.log(chalk.green('Fetching current state of the live chain. Please wait, it can take a while depending on the size of your chain.'));
-    let at = (await api.rpc.chain.getBlockHash()).toString();
+    const lastHdr = await api.rpc.chain.getHeader();
+    let at = (await api.rpc.chain.getBlockHash(lastHdr.number.unwrap())).toString();
     progressBar.start(totalChunks, 0);
     const stream = fs.createWriteStream(storagePath, { flags: 'a' });
     stream.write("[");
@@ -96,6 +105,9 @@ async function main() {
     stream.end();
     progressBar.stop();
   }
+
+
+     
 
   const metadata = await api.rpc.state.getMetadata();
   // Populate the prefixes array
@@ -108,9 +120,14 @@ async function main() {
     }
   });
 
-  // Generate chain spec for original and forked chains
+    
+
+                  
+  
+
+  // Generate chain spec for original and forked chains 
   if (originalChain == '') {
-    execSync(binaryPath + ` build-spec --raw > ` + originalSpecPath);
+    execSync(binaryPath + ` build-spec  --raw > ` + originalSpecPath);
   } else {
     execSync(binaryPath + ` build-spec --chain ${originalChain} --raw > ` + originalSpecPath);
   }
@@ -146,7 +163,7 @@ async function main() {
   forkedSpec.genesis.raw.top['0x5f3e4907f716ac89b6347d15ececedcaf7dad0317324aecae8744b87fc95f2f3'] = '0x02';
 
   if (alice !== '') {
-    // Set sudo key to //Alice
+    // Set sudo key to //Alice //5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY
     forkedSpec.genesis.raw.top['0x5c0d1176a568c1f92944340dbfed9e9c530ebca703c85910e7164cb7d1c9e47b'] = '0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d';
   }
 
@@ -158,9 +175,11 @@ async function main() {
 
 main();
 
+
+
 async function fetchChunks(prefix, levelsRemaining, stream, at) {
   if (levelsRemaining <= 0) {
-    const pairs = await provider.send('state_getPairs', [prefix, at]);
+    const pairs = await WSprovider.send('state_getPairs', [prefix, at]);
     if (pairs.length > 0) {
       separator ? stream.write(",") : separator = true;
       stream.write(JSON.stringify(pairs).slice(1, -1));
