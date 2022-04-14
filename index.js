@@ -18,7 +18,7 @@ const forkedSpecPath = path.join(__dirname, 'data', 'fork.json');
 const storagePath = path.join(__dirname, 'data', 'storage.json');
 
 // Using http endpoint since substrate's Ws endpoint has a size limit.
-const WSprovider = new WsProvider( 'ws://127.0.0.1:9944');//wss://node-test.riochain.io //0.0.0.0:9944
+const WSprovider = new WsProvider( 'wss://kusama-rpc.polkadot.io');
 // The storage download will be split into 256^chunksLevel chunks.
 const chunksLevel = 2;
 // process.env.FORK_CHUNKS_LEVEL || 1;
